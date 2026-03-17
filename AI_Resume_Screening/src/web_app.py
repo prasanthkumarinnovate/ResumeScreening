@@ -119,21 +119,27 @@ h3 {
 </style>
 """, unsafe_allow_html=True)
 
+
 # --------- Header ---------
 
-st.markdown('<p class="title"><center><h1>📄 AI Resume Screening System</h1></center></p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Upload Job Description and Resumes to find the best candidates</p>', unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center'>📄 AI Resume Screening System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center'>Upload Job Description and Resumes to find the best candidates</p>", unsafe_allow_html=True)
 
 st.divider()
 
-# --------- File Upload ---------
+# --------- Upload Section ---------
 
 st.subheader("📂 Upload Files")
 
-jd_file = st.file_uploader("Upload Job Description (TXT)", type=["txt"])
+# Job Description Upload
+jd_file = st.file_uploader(
+    "Upload Job Description (TXT / PDF / DOCX)",
+    type=["txt", "pdf", "docx"]
+)
 
+# Resume Upload
 resume_files = st.file_uploader(
-    "Upload Resumes (PDF or DOCX)",
+    "Upload Resumes (PDF / DOCX)",
     type=["pdf", "docx"],
     accept_multiple_files=True
 )
@@ -144,24 +150,41 @@ st.divider()
 
 if st.button("🚀 Analyze Resumes", use_container_width=True):
 
-    if not jd_file or not resume_files:
-        st.error("⚠ Please upload both Job Description and at least one Resume.")
+    if jd_file is None or resume_files is None:
+        st.error("⚠ Please upload Job Description and Resumes")
 
     else:
 
         with st.spinner("Analyzing resumes..."):
 
-            jd_text = jd_file.read().decode("utf-8")
+            # --------- Process Job Description ---------
+
+            jd_extension = os.path.splitext(jd_file.name)[1]
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=jd_extension) as tmp:
+                tmp.write(jd_file.read())
+                jd_path = tmp.name
+
+            if jd_extension == ".txt":
+                with open(jd_path, "r", encoding="utf-8") as f:
+                    jd_text = f.read()
+            else:
+                jd_text = parse_resume(jd_path)
+
             jd_processed = preprocess(jd_text)
+
+            os.remove(jd_path)
+
+            # --------- Process Resumes ---------
 
             resume_texts = []
             resume_names = []
 
             for resume in resume_files:
 
-                file_extension = os.path.splitext(resume.name)[1]
+                extension = os.path.splitext(resume.name)[1]
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
                     tmp.write(resume.read())
                     tmp_path = tmp.name
 
@@ -173,9 +196,13 @@ if st.button("🚀 Analyze Resumes", use_container_width=True):
 
                 os.remove(tmp_path)
 
+            # --------- Calculate Similarity ---------
+
             scores = calculate_similarity(resume_texts, jd_processed)
 
         st.success("✅ Analysis Completed")
+
+        # --------- Display Results ---------
 
         st.subheader("📊 Resume Match Results")
 
@@ -183,18 +210,19 @@ if st.button("🚀 Analyze Resumes", use_container_width=True):
 
         for name, score in results:
 
-            percentage = round(score * 100, 2)
+            percent = round(score * 100, 2)
 
             st.markdown(f"""
             <div class="result-card">
-                <b>{name}</b><br>
-                Match Score: <b>{percentage}%</b>
+            <b>{name}</b><br>
+            Match Score: <b>{percent}%</b>
             </div>
             """, unsafe_allow_html=True)
 
             st.progress(score)
 
-        # Highlight top candidate
-        top_candidate = results[0]
+        # --------- Top Candidate ---------
 
-        st.success(f"🏆 Top Candidate: {top_candidate[0]} ({round(top_candidate[1]*100,2)}%)")
+        top = results[0]
+
+        st.success(f"🏆 Top Candidate: {top[0]} ({round(top[1]*100,2)}%)")
